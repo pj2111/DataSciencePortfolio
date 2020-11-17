@@ -1,0 +1,112 @@
+# pre-processing data
+
+import nltk
+
+from nltk.corpus import stopwords
+
+from nltk.stem import WordNetLemmatizer
+
+import string
+
+# import pandas as pd
+
+from nltk import pos_tag
+
+from nltk.stem import PorterStemmer
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('averaged_perceptron_tagger')
+nltk.download('wordnet')
+
+def preprocessing(text):
+  text2 = " ".join("".join([" " if ch in string.punctuation else ch for ch in text]).split())
+  #print(text2)
+  tokens = [word for sent in nltk.sent_tokenize(text2) for word in nltk.word_tokenize(sent)]
+  #print(tokens)
+  tokens = [word.lower() for word in tokens]
+  #print(tokens)
+  stopwds = stopwords.words('english')
+  tokens = [token for token in tokens if token not in stopwds]
+  #print(tokens)
+  ##tokens = [word for word in tokens if len(word)>=3]
+  #print(tokens)
+  stemmer = PorterStemmer()
+  tokens = [stemmer.stem(word) for word in tokens]
+  #print(tokens)
+  tagged_corpus = pos_tag(tokens)
+  Noun_tags = ['NN','NNP','NNPS','NNS']
+  Verb_tags = ['VB','VBD','VBG','VBN','VBP','VBZ']
+  lemmatizer = WordNetLemmatizer()
+  def prat_lemmatize(token,tag):
+    if tag in Noun_tags:
+      return lemmatizer.lemmatize(token,'n')
+    elif tag in Verb_tags:
+        return lemmatizer.lemmatize(token,'v')
+    else:
+        return lemmatizer.lemmatize(token,'n')
+  pre_proc_text =   " ".join([prat_lemmatize(token,tag) for token,tag in tagged_corpus])
+  return pre_proc_text
+  print(pre_proc_text)
+
+####--------------- Prediction Routine  can be  other script which load models from file -------------------####
+## Load Saved model from disk
+# load json and create model
+
+from sklearn.preprocessing import LabelEncoder
+from keras.models import Sequential
+from keras.layers.core import Dense, Dropout, Activation
+from keras.utils import np_utils
+from keras.models import model_from_json
+import pickle
+import pandas as pd
+
+json_file = open('model.json', 'r')
+loaded_model_json = json_file.read()
+json_file.close()
+loaded_model = model_from_json(loaded_model_json)
+# load weights into new model
+loaded_model.load_weights("model.h5")
+print("Loaded model from disk")
+
+
+### Load Sklern Model from disk
+encoder = pickle.load( open( "label_encode.pkl", "rb" ) )
+vectorizer = pickle.load( open( "vectorizer.pkl", "rb" ) )
+
+
+### prediction code
+
+TestMail = pd.read_excel('/content/Test Mail.xlsx')
+#TestMail.sample(3)
+
+
+prediction_df = TestMail.iloc[:,-2]
+prediction_df.sample(3)
+#print(prediction_df)
+
+# prepare data for prediction
+preprocessed = []
+for i in prediction_df.values:
+  preprocessed.append(preprocessing(i))
+
+test_prediction = vectorizer.transform(preprocessed).todense()
+
+y_pred_class = loaded_model.predict_classes(test_prediction)
+print(y_pred_class)
+pred_label = encoder.inverse_transform(y_pred_class)
+pred_label
+
+
+df_class = pd.DataFrame(TestMail)
+
+df_class['Predicted Labels'] = pred_label
+
+  
+# combine this new data with existing DataFrame 
+#df_class["Prediction"] = df_class["Target1"].map(pred_label) 
+
+#df_class = df_class.drop('Target1', axis=1)
+
+#df_print=df_class('From','To','Date','No_of_Attachments','Attachment_type','Subject','Body','Target')
+df_class.sample(10)
+df_class.to_excel("outputtest.xlsx")
